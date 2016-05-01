@@ -10,7 +10,7 @@ $l['securitylog_info_desc'] = "Logs all failed attempts to log into an account."
 $l['can_manage_security_log'] = "Can manage security log?";
 
 $l['security_log'] = "Security Log";
-$l['security_log_desc'] = "Here you can view, prune, and search the security logs. These logs contain all failed attempts to login into an account.";
+$l['security_log_desc'] = "Here you can view, prune, and search the security logs. These logs contain all failed attempts to log into an account.";
 $l['prune_security_log'] = "Prune Security Log";
 $l['prune_security_log_desc'] = "Here you can prune the security logs matching a specified criteria.";
 
