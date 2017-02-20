@@ -198,7 +198,15 @@ if(!$mybb->input['action'])
 		$username = format_name(htmlspecialchars_uni($logitem['username']), $logitem['usergroup'], $logitem['displaygroup']);
 		$logitem['profilelink'] = build_profile_link($username, $logitem['uid'], "_blank");
 
-		if($logitem['admincp'] == 1)
+		if($logitem['admincp'] == 2)
+		{
+			$adminattempt = "<strong>{$lang->yes_pin}</strong>";
+		}
+		elseif($logitem['admincp'] == 1 && !empty($config['secret_pin']))
+		{
+			$adminattempt = "<strong>{$lang->yes_password}</strong>";
+		}
+		elseif($logitem['admincp'] == 1 && empty($config['secret_pin']))
 		{
 			$adminattempt = "<strong>{$lang->yes}</strong>";
 		}

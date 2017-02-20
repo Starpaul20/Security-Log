@@ -13,6 +13,7 @@ if(!defined("IN_MYBB"))
 // Tell MyBB when to run the hooks
 $plugins->add_hook("datahandler_login_verify_password_end", "securitylog_run");
 
+$plugins->add_hook("admin_login_incorrect_pin", "securitylog_admin_pin");
 $plugins->add_hook("admin_tools_menu_logs", "securitylog_admin_menu");
 $plugins->add_hook("admin_tools_action_handler", "securitylog_admin_action_handler");
 $plugins->add_hook("admin_tools_permissions", "securitylog_admin_permissions");
@@ -136,6 +137,21 @@ function securitylog_run($args)
 	}
 
 	return $args;
+}
+
+// Log bad login attempts with Admin CP pin
+function securitylog_admin_pin()
+{
+	global $db, $mybb, $login_user;
+	$mybb->binary_fields["securitylog"] = array('ipaddress' => true);
+
+	$insert_array = array(
+		"uid" => $login_user['uid'],
+		"dateline" => TIME_NOW,
+		"admincp" => 2,
+		"ipaddress" => $db->escape_binary(my_inet_pton(get_ip()))
+	);
+	$db->insert_query('securitylog', $insert_array);
 }
 
 // Admin CP log page

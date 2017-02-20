@@ -19,6 +19,8 @@ $l['date'] = "Date";
 $l['ipaddress'] = "IP Address";
 $l['admin_attempt'] = "Admin CP Attempt";
 
+$l['yes_pin'] = "Yes, wrong secret pin";
+$l['yes_password'] = "Yes, wrong password";
 $l['yes'] = "Yes";
 $l['no'] = "No";
 
