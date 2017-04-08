@@ -42,3 +42,5 @@ $l['no_security_logs'] = "There are no log entries with the selected criteria.";
 
 $l['success_pruned_security_logs'] = "The security logs have been pruned successfully.";
 $l['note_logs_locked'] = "For security reasons, logs less than 24 hours old cannot be pruned.";
+
+$l['na_deleted'] = "N/A - Been Deleted";
