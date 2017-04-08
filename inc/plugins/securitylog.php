@@ -12,7 +12,9 @@ if(!defined("IN_MYBB"))
 
 // Tell MyBB when to run the hooks
 $plugins->add_hook("datahandler_login_verify_password_end", "securitylog_run");
+$plugins->add_hook("datahandler_user_delete_content", "securitylog_delete");
 
+$plugins->add_hook("admin_user_users_merge_commit", "securitylog_merge");
 $plugins->add_hook("admin_login_incorrect_pin", "securitylog_admin_pin");
 $plugins->add_hook("admin_tools_menu_logs", "securitylog_admin_menu");
 $plugins->add_hook("admin_tools_action_handler", "securitylog_admin_action_handler");
@@ -137,6 +139,26 @@ function securitylog_run($args)
 	}
 
 	return $args;
+}
+
+// Delete security log entries if user is deleted
+function securitylog_delete($delete)
+{
+	global $db;
+
+	$db->delete_query('securitylog', 'uid IN('.$delete->delete_uids.')');
+
+	return $delete;
+}
+
+// Merge security log entries if users are merged
+function securitylog_merge()
+{
+	global $db, $source_user, $destination_user;
+	$uid = array(
+		"uid" => $destination_user['uid']
+	);
+	$db->update_query("securitylog", $uid, "uid='{$source_user['uid']}'");
 }
 
 // Log bad login attempts with Admin CP pin
