@@ -1,6 +1,6 @@
 ## INFORMATION ##
 
-Security Log (1.0) for MyBB 1.8
+Security Log (1.1) for MyBB 1.8
 Created by: Starpaul20
 Copyright: ©2016
 License: GPL
@@ -20,4 +20,4 @@ This plugin offers full language support.
 
 ## UPDATING ##
 
-Any beta version should be reinstalled.
+If you're updating from any previous version, you only need to overwrite old files with the new ones, no need to deactivate.
