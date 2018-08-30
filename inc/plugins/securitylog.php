@@ -11,7 +11,7 @@ if(!defined("IN_MYBB"))
 }
 
 // Tell MyBB when to run the hooks
-$plugins->add_hook("datahandler_login_verify_password_end", "securitylog_run");
+$plugins->add_hook("datahandler_login_validate_end", "securitylog_run");
 $plugins->add_hook("datahandler_user_delete_content", "securitylog_delete");
 
 $plugins->add_hook("admin_user_users_merge_commit", "securitylog_merge");
@@ -110,35 +110,21 @@ function securitylog_deactivate()
 }
 
 // Log bad login attempts
-function securitylog_run($args)
+function securitylog_run($LoginDataHandler)
 {
-	global $db, $mybb, $user;
+	global $db, $mybb;
 	$mybb->binary_fields["securitylog"] = array('ipaddress' => true);
 
-	if(defined('IN_ADMINCP'))
-	{
-		$admincp = 1;
-		$password = md5($mybb->input['password']);
-	}
-	else
-	{
-		$admincp = 0;
-		$password = md5($user['password']);
-	}
-
-	$saltedpassword = md5(md5($args['this']->login_data['salt']).$password);
-	if($saltedpassword !== $args['this']->login_data['password'])
-	{
-		$insert_array = array(
-			"uid" => $args['this']->login_data['uid'],
-			"dateline" => TIME_NOW,
-			"admincp" => $admincp,
-			"ipaddress" => $db->escape_binary(my_inet_pton(get_ip()))
-		);
-		$db->insert_query('securitylog', $insert_array);
-	}
-
-	return $args;
+    if(count($LoginDataHandler->get_errors()) > 0)
+    {
+        $insert_array = array(
+            "uid" => $LoginDataHandler->login_data['uid'],
+            "dateline" => TIME_NOW,
+            "admincp" => (int)defined('IN_ADMINCP'),
+            "ipaddress" => $db->escape_binary(my_inet_pton(get_ip()))
+        );
+        $db->insert_query('securitylog', $insert_array);
+    }
 }
 
 // Delete security log entries if user is deleted
