@@ -115,7 +115,7 @@ function securitylog_run($LoginDataHandler)
 	global $db, $mybb;
 	$mybb->binary_fields["securitylog"] = array('ipaddress' => true);
 
-    if(count($LoginDataHandler->get_errors()) > 0)
+    if(count($LoginDataHandler->get_errors()) > 0 && $LoginDataHandler->login_data['uid'])
     {
         $insert_array = array(
             "uid" => $LoginDataHandler->login_data['uid'],
