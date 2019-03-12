@@ -7,7 +7,12 @@
 $l['securitylog_info_name'] = "Security Log";
 $l['securitylog_info_desc'] = "Logs all failed attempts to log into an account.";
 
+// Admin Permissions
 $l['can_manage_security_log'] = "Can manage security log?";
+
+// Admin Log
+$l['admin_log_tools_securitylog_prune'] = "Pruned {3} security logs older than {1} days";
+$l['admin_log_tools_securitylog_prune_user'] = "Pruned {3} security logs older than {1} days for user #{2}";
 
 $l['security_log'] = "Security Log";
 $l['security_log_desc'] = "Here you can view, prune, and search the security logs. These logs contain all failed attempts to log into an account.";

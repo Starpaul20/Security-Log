@@ -19,6 +19,7 @@ $plugins->add_hook("admin_login_incorrect_pin", "securitylog_admin_pin");
 $plugins->add_hook("admin_tools_menu_logs", "securitylog_admin_menu");
 $plugins->add_hook("admin_tools_action_handler", "securitylog_admin_action_handler");
 $plugins->add_hook("admin_tools_permissions", "securitylog_admin_permissions");
+$plugins->add_hook("admin_tools_get_admin_log_action", "securitylog_admin_adminlog");
 
 // The information that shows up on the plugin manager
 function securitylog_info()
@@ -188,4 +189,21 @@ function securitylog_admin_permissions($admin_permissions)
 	$admin_permissions['securitylog'] = $lang->can_manage_security_log;
 
 	return $admin_permissions;
+}
+
+// Admin Log display
+function securitylog_admin_adminlog($plugin_array)
+{
+	global $lang;
+	$lang->load("tools_securitylog");
+
+	if($plugin_array['lang_string'] == 'admin_log_tools_securitylog_prune')
+	{
+		if($plugin_array['logitem']['data'][1])
+		{
+			$plugin_array['lang_string'] = 'admin_log_tools_securitylog_prune_user';
+		}
+	}
+
+	return $plugin_array;
 }
