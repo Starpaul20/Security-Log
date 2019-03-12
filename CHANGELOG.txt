@@ -1,3 +1,8 @@
+1.2 (March 12th, 2019)
+- Changed log hook to datahandler_login_validate_end
+- Added UID check for log insertion
+- Added Admin Log support
+
 1.1 (April 9th, 2017)
 - Sanitized username
 - Log Admin CP wrong pin (Issue #1)
