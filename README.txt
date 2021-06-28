@@ -1,6 +1,6 @@
 ## INFORMATION ##
 
-Security Log (1.2) for MyBB 1.8
+Security Log (1.3) for MyBB 1.8
 Created by: Starpaul20
 Copyright: ©2016
 License: GPL
