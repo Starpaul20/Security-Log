@@ -130,6 +130,16 @@ if(!$mybb->input['action'])
 		$where .= " AND l.uid='".$mybb->get_input('uid', MyBB::INPUT_INT)."'";
 	}
 
+	if($mybb->get_input('ipaddress'))
+	{
+		$where .= " AND l.ipaddress=".$db->escape_binary(my_inet_pton($mybb->get_input('ipaddress')));
+	}
+
+	if($mybb->get_input('existing_accounts'))
+	{
+		$where .= " AND l.uid!=0";
+	}
+
 	// Order?
 	switch($mybb->get_input('sortby'))
 	{
@@ -182,12 +192,19 @@ if(!$mybb->input['action'])
 		$pagecnt = 1;
 	}
 
+	$bannedIps = array_column(
+		$cache->read('bannedips'),
+		'filter'
+	);
+
 	$table = new Table;
 	$table->construct_header($lang->username, array('width' => '30%'));
 	$table->construct_header($lang->date, array("class" => "align_center", 'width' => '35%'));
 	$table->construct_header($lang->ipaddress, array("class" => "align_center", 'width' => '20%'));
 	$table->construct_header($lang->admin_attempt, array("class" => "align_center", 'width' => '15%'));
+	$table->construct_header($lang->controls, array("class" => "align_center", 'width' => '1%'));
 
+	$logitems = array();
 	$query = $db->query("
 		SELECT l.*, u.username, u.usergroup, u.displaygroup
 		FROM ".TABLE_PREFIX."securitylog l
@@ -198,18 +215,101 @@ if(!$mybb->input['action'])
 	");
 	while($logitem = $db->fetch_array($query))
 	{
-		$adminattempt = '';
-		$logitem['dateline'] = my_date('relative', $logitem['dateline']);
+		$logitems[] = $logitem;
+	}
+
+	$escapeCallbacks = [
+		'ipaddress' => fn ($value) => $db->escape_binary($value),
+		'uid' => 'intval',
+		'raw_username' => fn ($value) => "'" . $db->escape_string($value) . "'",
+	];
+	$valueOccurrences = [];
+
+	foreach($escapeCallbacks as $columnName => $escapeCallback)
+	{
+		$valueOccurrences[$columnName] = [];
+
+		$values = array_column($logitems, $columnName);
+
+		if($values)
+		{
+			$valuesEscaped = array_unique(
+				array_map($escapeCallback, $values)
+			);
+
+			$query = $db->simple_select(
+				'securitylog',
+				$columnName . ' AS value, COUNT(*) AS n',
+				$columnName . ' IN (' . implode(',', $valuesEscaped) . ')',
+				[
+					'group_by' => $columnName,
+				],
+			);
+
+			while($item = $db->fetch_array($query))
+			{
+				$valueOccurrences[$columnName][ $item['value'] ] = $item['n'];
+			}
+		}
+	}
+
+	$i = 0;
+
+	foreach($logitems as $logitem)
+	{
+		$i++;
+
+		$date = my_date('relative', $logitem['dateline']);
 		$trow = alt_trow();
 
 		if($logitem['username'])
 		{
 			$username = format_name(htmlspecialchars_uni($logitem['username']), $logitem['usergroup'], $logitem['displaygroup']);
-			$logitem['profilelink'] = build_profile_link($username, $logitem['uid'], "_blank");
+			$account = build_profile_link($username, $logitem['uid'], "_blank");
+
+			$uidOccurrences = $valueOccurrences['uid'][ $logitem['uid'] ] ?? 0;
+			if($uidOccurrences > 1)
+			{
+				$account .= ' <a href="index.php?module=tools-securitylog&uid=' . (int)$logitem['uid'] . '">(' . my_number_format((int)$uidOccurrences) . ')</a>';
+			}
+		}
+		elseif($logitem['raw_username'])
+		{
+			if(my_strlen($logitem['raw_username']) > 30)
+			{
+				$shortUsername = htmlspecialchars_uni(
+					my_substr($logitem['raw_username'], 0, 30)
+				);
+				$shortUsername .= '&hellip;';
+			}
+			else
+			{
+				$shortUsername = '<span data-autoselect>' . htmlspecialchars_uni($logitem['raw_username']) . '</span>';
+			}
+
+			$account = $logitem['username'] = '<i title="' . htmlspecialchars_uni($logitem['raw_username']) . '">' . $shortUsername . '</i>';
+
+			$usernameOccurrences = $valueOccurrences['raw_username'][ $logitem['raw_username'] ] ?? 0;
+			if($usernameOccurrences > 1)
+			{
+				$account .= ' (' . my_number_format((int)$usernameOccurrences) . ')';
+			}
 		}
 		else
 		{
-			$username = $logitem['profilelink'] = $logitem['username'] = htmlspecialchars_uni($lang->na_deleted);
+			$account = htmlspecialchars_uni($lang->na_deleted);
+		}
+
+		$ipAddress = my_inet_ntop($db->unescape_binary($logitem['ipaddress']));
+		$ipAddressDisplayed = '<span data-autoselect>' . $ipAddress . '</span>';
+		if(in_array($ipAddress, $bannedIps))
+		{
+			$ipAddressDisplayed = '<s>' . $ipAddressDisplayed . '</s>';
+		}
+		$ipOccurrences = $valueOccurrences['ipaddress'][ $logitem['ipaddress'] ] ?? 0;
+		if($ipOccurrences > 1)
+		{
+			$ipAddressDisplayed .= ' <a href="index.php?module=tools-securitylog&ipaddress=' . htmlspecialchars_uni($ipAddress) . '">(' . my_number_format((int)$ipOccurrences) . ')</a>';
 		}
 
 		if($logitem['admincp'] == 2)
@@ -229,55 +329,49 @@ if(!$mybb->input['action'])
 			$adminattempt = $lang->no;
 		}
 
-		$table->construct_cell($logitem['profilelink']);
-		$table->construct_cell($logitem['dateline'], array("class" => "align_center"));
-		$table->construct_cell(my_inet_ntop($db->unescape_binary($logitem['ipaddress'])), array("class" => "align_center"));
+		$popup = new PopupMenu('entry_' . $i, $lang->options);
+		$popup->add_item($lang->ban_ip_address, 'index.php?module=config-banning&type=ips&filter=' . $ipAddress);
+
+		$table->construct_cell($account);
+		$table->construct_cell($date, array("class" => "align_center"));
+		$table->construct_cell($ipAddressDisplayed, array("class" => "align_center"));
 		$table->construct_cell($adminattempt, array("class" => "align_center"));
+		$table->construct_cell($popup->fetch(), array("class" => "align_center"));
 		$table->construct_row();
 	}
 
 	if($table->num_rows() == 0)
 	{
-		$table->construct_cell($lang->no_security_logs, array("colspan" => "4"));
+		$table->construct_cell($lang->no_security_logs, array("colspan" => "5"));
 		$table->construct_row();
 	}
 
 	$table->output($lang->security_log);
 
+	echo <<<'HTML'
+	<script>
+	document.querySelectorAll('[data-autoselect]').forEach($e => {
+		$e.addEventListener('click', e => {
+			let range = document.createRange();
+			range.selectNodeContents($e);
+			
+			let selection = window.getSelection();
+			selection.removeAllRanges();
+			selection.addRange(range);
+		});
+	});
+	</script>
+	HTML;
+
 	// Do we need to construct the pagination?
 	if($rescount > $perpage)
 	{
-		echo draw_admin_pagination($pagecnt, $perpage, $rescount, "index.php?module=tools-securitylog&amp;perpage=$perpage&amp;uid={$mybb->input['uid']}&amp;sortby={$mybb->input['sortby']}&amp;order={$order}")."<br />";
+		echo draw_admin_pagination($pagecnt, $perpage, $rescount, "index.php?module=tools-securitylog&amp;perpage=$perpage&amp;uid={$mybb->get_input('uid', MyBB::INPUT_INT)}&amp;existing_accounts={$mybb->get_input('existing_accounts', MyBB::INPUT_INT)}&amp;sortby={$mybb->get_input('sortby', MyBB::INPUT_INT)}&amp;order={$order}")."<br />";
 	}
 
 	// Fetch filter options
 	$sortbysel[$mybb->get_input('sortby')] = "selected=\"selected\"";
 	$ordersel[$mybb->get_input('order')] = "selected=\"selected\"";
-
-	$user_options[''] = $lang->all_users;
-	$user_options['0'] = '----------';
-
-	$query = $db->query("
-		SELECT DISTINCT l.uid, u.username
-		FROM ".TABLE_PREFIX."securitylog l
-		LEFT JOIN ".TABLE_PREFIX."users u ON (l.uid=u.uid)
-		ORDER BY u.username ASC
-	");
-	while($user = $db->fetch_array($query))
-	{
-		// Deleted Users
-		if(!$user['username'])
-		{
-			$user['username'] = htmlspecialchars_uni($lang->na_deleted);
-		}
-
-		$selected = '';
-		if($mybb->get_input('uid') == $user['uid'])
-		{
-			$selected = "selected=\"selected\"";
-		}
-		$user_options[$user['uid']] = htmlspecialchars_uni($user['username']);
-	}
 
 	$sort_by = array(
 		'dateline' => $lang->date,
@@ -291,7 +385,15 @@ if(!$mybb->input['action'])
 
 	$form = new Form("index.php?module=tools-securitylog", "post");
 	$form_container = new FormContainer($lang->filter_security_logs);
-	$form_container->output_row($lang->username_colon, "", $form->generate_select_box('uid', $user_options, $mybb->get_input('uid'), array('id' => 'uid')), 'uid');
+	$form_container->output_row(
+		$lang->username_colon,
+		"",
+		$form->generate_text_box('uid', '', array('id' => 'uid')) .
+		' / ' .
+		$form->generate_check_box('existing_accounts', '1', '<a href="index.php?module=tools-securitylog&existing_accounts=1">' . $lang->existing_accounts . '</a>'),
+		'uid'
+	);
+	$form_container->output_row($lang->ip_address_colon, "", $form->generate_text_box('ipaddress'), 'ipaddress');
 	$form_container->output_row($lang->sort_by, "", $form->generate_select_box('sortby', $sort_by, $mybb->get_input('sortby'), array('id' => 'sortby'))." {$lang->in} ".$form->generate_select_box('order', $order_array, $order, array('id' => 'order'))." {$lang->order}", 'order');
 	$form_container->output_row($lang->results_per_page, "", $form->generate_numeric_field('perpage', $perpage, array('id' => 'perpage', 'min' => 1)), 'perpage');
 
@@ -299,6 +401,44 @@ if(!$mybb->input['action'])
 	$buttons[] = $form->generate_submit_button($lang->filter_security_logs);
 	$form->output_submit_wrapper($buttons);
 	$form->end();
+
+	// Autocompletion for usernames
+	echo '
+<link rel="stylesheet" href="../jscripts/select2/select2.css">
+<script type="text/javascript" src="../jscripts/select2/select2.min.js?ver=1804"></script>
+<script type="text/javascript">
+<!--
+$("#uid").select2({
+	placeholder: "'.$lang->search_for_a_user.'",
+	minimumInputLength: 2,
+	multiple: false,
+	ajax: { // instead of writing the function to execute the request we use Select2\'s convenient helper
+		url: "../xmlhttp.php?action=get_users",
+		dataType: \'json\',
+		data: function (term, page) {
+			return {
+				query: term // search term
+			};
+		},
+		results: function (data, page) { // parse the results into the format expected by Select2.
+			data = data.map(e => { e.id = e.uid; return e; });
+			return {results: data};
+		}
+	},
+	initSelection: function(element, callback) {
+		var query = $(element).val();
+		if (query !== "") {
+			$.ajax("../xmlhttp.php?action=get_users&getone=1", {
+				data: {
+					query: query
+				},
+				dataType: "json"
+			}).done(function(data) { callback(data); });
+		}
+	}
+});
+// -->
+</script>';
 
 	$page->output_footer();
 }

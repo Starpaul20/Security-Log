@@ -53,7 +53,8 @@ function securitylog_install()
 				uid int NOT NULL default '0',
 				dateline numeric(30,0) NOT NULL default '0',
 				admincp smallint NOT NULL default '0',
-				ipaddress bytea NOT NULL default ''
+				ipaddress bytea NOT NULL default '',
+				raw_username varchar(255),
 			);");
 			break;
 		case "sqlite":
@@ -61,7 +62,8 @@ function securitylog_install()
 				uid int NOT NULL default '0',
 				dateline int NOT NULL default '0',
 				admincp tinyint(1) NOT NULL default '',
-				ipaddress blob(16) NOT NULL default ''
+				ipaddress blob(16) NOT NULL default '',
+				raw_username varchar(255)
 			);");
 			break;
 		default:
@@ -70,6 +72,7 @@ function securitylog_install()
 				dateline int unsigned NOT NULL default '0',
 				admincp tinyint(1) NOT NULL default '0',
 				ipaddress varbinary(16) NOT NULL default '',
+				raw_username varchar(255),
 				KEY uid (uid)
 			) ENGINE=MyISAM{$collation};");
 			break;
@@ -113,19 +116,79 @@ function securitylog_deactivate()
 // Log bad login attempts
 function securitylog_run($LoginDataHandler)
 {
-	global $db, $mybb;
+	global $db, $cache, $mybb;
 	$mybb->binary_fields["securitylog"] = array('ipaddress' => true);
 
-    if(count($LoginDataHandler->get_errors()) > 0 && $LoginDataHandler->login_data['uid'])
-    {
-        $insert_array = array(
-            "uid" => $LoginDataHandler->login_data['uid'],
-            "dateline" => TIME_NOW,
-            "admincp" => (int)defined('IN_ADMINCP'),
-            "ipaddress" => $db->escape_binary(my_inet_pton(get_ip()))
-        );
-        $db->insert_query('securitylog', $insert_array);
-    }
+	if(count($LoginDataHandler->get_errors()) > 0 /*&& $LoginDataHandler->login_data['uid']*/)
+	{
+		if (!$LoginDataHandler->captcha_verified)
+		{
+			return;
+		}
+
+		$ipEscaped = $db->escape_string(get_ip());
+		$ipBinaryEscaped = $db->escape_binary(my_inet_pton(get_ip()));
+
+		$insert_array = array(
+			"uid" => $LoginDataHandler->login_data['uid'] ?? 0,
+			"dateline" => TIME_NOW,
+			"admincp" => (int)defined('IN_ADMINCP'),
+			"ipaddress" => $ipBinaryEscaped
+		);
+
+		if (($LoginDataHandler->login_data['uid'] ?? 0) == 0 && isset($LoginDataHandler->data['username'])) {
+			$insert_array['raw_username'] = my_substr($LoginDataHandler->data['username'], 0, 255);
+		}
+
+		$db->insert_query('securitylog', $insert_array);
+
+		// auto-ban
+		$thresholds = [
+			[
+				'timespanSeconds' => 3600 * 24,
+				'maxAttempts' => 20,
+			],
+		];
+		$whitelist = [
+		];
+
+		if(!in_array(get_ip(), $whitelist))
+		{
+			foreach($thresholds as $threshold)
+			{
+				$cutoff = TIME_NOW - $threshold['timespanSeconds'];
+
+				$query = $db->simple_select(
+					'securitylog',
+					'COUNT(*) AS n',
+					'ipaddress=' . $ipBinaryEscaped . ' AND dateline > ' . $cutoff
+				);
+				$count = $db->fetch_field($query, 'n');
+
+				if ($count > $threshold['maxAttempts'])
+				{
+					$query = $db->simple_select(
+						'banfilters',
+						'COUNT(*) AS n',
+						"filter='" . $ipEscaped . "' AND type = 1"
+					);
+					$count = $db->fetch_field($query, 'n');
+
+					if ($count == 0)
+					{
+						$insert_array = array(
+							"type" => 1,
+							"filter" => $ipEscaped,
+							"dateline" => TIME_NOW
+						);
+						$db->insert_query('banfilters', $insert_array);
+
+						$cache->update_bannedips();
+					}
+				}
+			}
+		}
+	}
 }
 
 // Delete security log entries if user is deleted
